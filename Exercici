@@ -1,0 +1,69 @@
+#include <Arduino_FreeRTOS.h>
+#include <timers.h>
+#include <semphr.h>
+#include <queue.h>
+
+void taskA(void *param);
+void taskB(void *param);
+void TimerCallback(TimerHandle_t pTimer);
+
+//VARIABLES GLOBALES TIMER
+TimerHandle_t Timer;  // Variable para timer
+int TimerInterval = 10000;
+int TimerID = 0;
+//VARIABLE GLOBAL SEMAFORO
+SemaphoreHandle_t Semaphore = 0;  // Variable para semaforo
+//VARIABLES GLOBALES TAREAS
+TaskHandle_t Task_HandleA;
+TaskHandle_t Task_HandleB;
+//VARIABLE GLOBAL QUEUE
+QueueHandle_t Buffer;
+int CONTADOR = 0;
+
+void setup() {
+  Serial.begin(115200);
+  Timer = xTimerCreate("Timer", pdMS_TO_TICKS(TimerInterval), pdTRUE, (void *)TimerID, TimerCallback);  //función para crear el timer
+  if (Timer == NULL) {
+    Serial.print("El timer no ha sigut creat");
+  } else {
+    if (xTimerStart(Timer, 0) != pdPASS) {  // función para iniciar el timer
+      Serial.print("El timer no s'ha pogut activar");
+    }
+  }
+
+  Semaphore = xSemaphoreCreateBinary();  // función para crear el semaforo
+
+  Buffer = xQueueCreate(1, sizeof(int));  //Creamos la Cola
+
+  xTaskCreate(taskA, "TaskA", 100, NULL, 0, &Task_HandleA);
+  xTaskCreate(taskB, "TaskB", 100, NULL, 0, &Task_HandleB);
+  
+  vTaskStartScheduler();
+}
+void loop() {
+  // put your main code here, to run repeatedly:
+}
+void TimerCallback(TimerHandle_t pTimer) {
+  CONTADOR = CONTADOR + 10;
+  Serial.print(CONTADOR);
+  Serial.println(" TIMEOUT");
+  xSemaphoreGive(Semaphore);
+}
+void taskA(void *param) {
+  while (1) {
+    xSemaphoreTake(Semaphore, portMAX_DELAY);
+    int randomnum = random(1000, 9999);
+    Serial.print("PING ");
+    Serial.println(randomnum);
+    xQueueSend(Buffer, &randomnum, portMAX_DELAY);
+  }
+}
+void taskB(void *param) {
+  while (1) {
+    int BufferValue = 0;
+    xQueueReceive(Buffer, &BufferValue, portMAX_DELAY);
+    Serial.print("PONG ");
+    Serial.println(BufferValue);
+    Serial.println("");
+  }
+}
